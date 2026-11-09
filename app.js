@@ -289,8 +289,32 @@
       '<p class="foot">' + esc(state.source) + ' · 점수 기준 변경은 core.js 의 DEFAULTS 에서 조정</p>';
   }
 
+  /* ---------- 데이터가 없을 때 첫 화면: 엑셀 불러오기 안내 ---------- */
+  function renderEmpty() {
+    state.A = null;
+    $('#period').textContent = '엑셀을 불러오면 분석이 시작됩니다.';
+    $('#reset').hidden = true;
+    $('#csv').hidden = true;
+    msg('');
+    $('#sec-kpi').className = '';
+    $('#sec-kpi').innerHTML =
+      '<div class="drop" id="drop">' +
+      '<svg class="drop-ic" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-5"/><path d="m9.5 14.5 2.5-2.5 2.5 2.5"/></svg>' +
+      '<h2>오류 로그 엑셀을 불러오세요</h2>' +
+      '<p>엑셀 파일을 이 영역으로 끌어다 놓거나, 아래 버튼으로 선택하세요.<br>여러 파일(예: 월별 3개)을 한 번에 선택할 수 있습니다.</p>' +
+      '<label class="btn primary big" for="file">엑셀 파일 선택</label>' +
+      '<ul class="hint">' +
+      '<li>.xlsx · .xls · .csv 지원, <code>TRX_CD</code>·<code>LOG_OCCUR_DTTM</code> 컬럼이 있는 시트를 인식합니다</li>' +
+      '<li>파일은 이 브라우저 안에서만 분석되며 서버로 전송되지 않습니다</li>' +
+      '<li>사용자 IP는 저장·표시하지 않습니다</li></ul></div>';
+    ['#sec-must', '#sec-table', '#sec-trend', '#sec-method'].forEach(s => { $(s).innerHTML = ''; });
+  }
+
   /* ---------- 전체 렌더 ---------- */
   function setData(data, source) {
+    $('#csv').hidden = false;
+    $('#reset').hidden = !state.builtin;
+    $('#sec-kpi').className = 'kpis';
     state.data = data;
     state.source = source;
     state.A = C.analyze(data.rows, { sqls: data.sqls });
@@ -371,16 +395,26 @@
   });
   $('#file').addEventListener('change', ev => { handleFiles(ev.target.files).then(() => { ev.target.value = ''; }); });
   $('#csv').addEventListener('click', exportCsv);
+
+  // 엑셀 끌어다 놓기 (화면 어디에 놓아도 됨)
+  let dragDepth = 0;
+  const hasFiles = ev => ev.dataTransfer && Array.from(ev.dataTransfer.types || []).indexOf('Files') >= 0;
+  document.addEventListener('dragenter', ev => { if (hasFiles(ev)) { dragDepth++; document.body.classList.add('dragging'); } });
+  document.addEventListener('dragleave', ev => { if (hasFiles(ev) && --dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+  document.addEventListener('dragover', ev => { if (hasFiles(ev)) ev.preventDefault(); });
+  document.addEventListener('drop', ev => {
+    if (!hasFiles(ev)) return;
+    ev.preventDefault();
+    dragDepth = 0; document.body.classList.remove('dragging');
+    handleFiles(ev.dataTransfer.files);
+  });
   $('#reset').addEventListener('click', () => { if (state.builtin) { setData(state.builtin, '내장 데이터'); msg(''); } else loadBuiltin(); });
 
   /* ---------- 시작 ---------- */
   function loadBuiltin() {
     fetch('data.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(d => { state.builtin = d; setData(d, '내장 데이터'); msg(''); })
-      .catch(e => {
-        $('#period').textContent = '분석할 데이터가 없습니다. 오른쪽 위 “엑셀 불러오기”로 오류 로그 엑셀을 선택해 주세요.';
-        msg('내장 데이터가 없습니다(' + e.message + '). 엑셀은 이 브라우저 안에서만 분석되고 서버로 전송되지 않습니다.', 'info');
-      });
+      .catch(() => { if (!state.A) renderEmpty(); });
   }
   loadBuiltin();
 })();

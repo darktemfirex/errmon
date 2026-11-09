@@ -46,6 +46,16 @@ small { color: var(--muted); }
 .btn:focus-visible, .link:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .msg { max-width: 1240px; margin: 12px auto 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; background: var(--info-bg); color: var(--info); }
+.btn.big { padding: 11px 26px; font-size: 15px; font-weight: 600; display: inline-block; }
+.drop { background: var(--card); border: 2px dashed var(--line); border-radius: 16px; padding: 44px 20px 36px; text-align: center; box-shadow: var(--shadow); }
+.drop h2 { font-size: 20px; margin: 10px 0 6px; }
+.drop p { margin: 0 0 20px; color: var(--muted); }
+.drop-ic { color: var(--accent); }
+.drop .hint { list-style: none; margin: 24px auto 0; padding: 0; max-width: 560px; text-align: left; font-size: 12.5px; color: var(--muted); }
+.drop .hint li { padding: 3px 0 3px 16px; position: relative; }
+.drop .hint li::before { content: ""; position: absolute; left: 4px; top: 11px; width: 5px; height: 5px; border-radius: 50%; background: var(--line); }
+body.dragging .drop { border-color: var(--accent); background: var(--info-bg); }
+body.dragging::after { content: "여기에 놓으면 엑셀을 불러옵니다"; position: fixed; inset: 0; display: grid; place-items: center; z-index: 50; pointer-events: none; font-size: 20px; font-weight: 700; color: var(--accent); background: rgba(36, 89, 214, .08); outline: 3px dashed var(--accent); outline-offset: -12px; }
 .msg.info { background: var(--info-bg); color: var(--info); }
 .msg.err { background: var(--danger-bg); color: var(--danger); }
 .msg.hide { display: none; }
