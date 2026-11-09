@@ -26,11 +26,13 @@
         <button class="btn" id="txt" type="button" title="분석 결과를 텍스트(TXT) 보고서로 저장">보고서(TXT)</button>
         <button class="btn" id="reset" type="button">내장 데이터</button>
         <button class="btn" id="csv" type="button">우선순위 CSV</button>
+        <button class="btn primary" id="install" type="button" hidden>앱 설치</button>
       </div>
     </div>
   </header>
 
   <div id="msg" class="msg hide" role="status"></div>
+  <div id="ios-hint" class="msg" role="note" hidden>iPhone/iPad: Safari 하단의 공유 버튼(□↑)을 누르고 <b>홈 화면에 추가</b>를 선택하면 앱으로 설치됩니다. <a href="#" id="ios-hint-x">닫기</a></div>
 
   <main id="app">
     <section id="sec-kpi" class="kpis"></section>
@@ -47,6 +49,27 @@
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
       addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
     }
+    // 앱 설치 버튼: 브라우저는 자동 설치를 허용하지 않으므로 사용자가 누르게 한다
+    (function () {
+      var btn = document.getElementById('install'), hint = document.getElementById('ios-hint'), dp = null;
+      var standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+      if (standalone) return;
+      addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); dp = e; btn.hidden = false; });
+      btn.addEventListener('click', function () {
+        if (!dp) return;
+        dp.prompt();
+        dp.userChoice.then(function () { dp = null; btn.hidden = true; });
+      });
+      addEventListener('appinstalled', function () { dp = null; btn.hidden = true; hint.hidden = true; });
+      // iOS Safari 는 설치 프롬프트 이벤트가 없어 안내 문구로 대신한다
+      var ua = navigator.userAgent, ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var safari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+      var dismissed = false; try { dismissed = localStorage.getItem('errmon-ios-hint') === '1'; } catch (e) {}
+      if (ios && safari && !dismissed) hint.hidden = false;
+      document.getElementById('ios-hint-x').addEventListener('click', function (e) {
+        e.preventDefault(); hint.hidden = true; try { localStorage.setItem('errmon-ios-hint', '1'); } catch (x) {}
+      });
+    })();
   </script>
 </body>
 </html>
