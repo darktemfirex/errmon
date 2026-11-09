@@ -4,12 +4,12 @@ const assert = require('node:assert');
 const C = require('./core.js');
 
 const mk = (o) => Object.assign({
-  d: '2026-10-01', t: '10:00:00', trx: 'ORBWMEN700001R01', n: 'node1', c: 'c1', scr: '700001', ip: '10.0.0.1',
+  d: '2026-10-01', t: '10:00:00', trx: 'ORBWMEN700001R01', n: 'node1', c: 'c1', scr: '700001', u: 'u0',
   err: 'BXME30006', to: 30000, q: 'sel', ql: 'XDao.sel', tb: [], ora: '', lk: 0, g: '', app: ''
 }, o);
 
 function rowsFor(trx, dates, extra) {
-  return dates.map((d, i) => mk(Object.assign({ trx, d, g: trx + d + i, ip: '10.0.' + (i % 12) + '.1' }, extra || {})));
+  return dates.map((d, i) => mk(Object.assign({ trx, d, g: trx + d + i, u: 'u' + (i % 12) }, extra || {})));
 }
 function span(from, n) {
   const out = []; const t0 = C.toUTC(from);
@@ -33,6 +33,19 @@ test('extractRow: 스택트레이스에서 쿼리·테이블·SQL 추출', () =>
   assert.equal(row.ql, 'WMEN704035Dao.selectItem');
   assert.deepEqual(row.tb, ['TB_NA_WM_DM_OUT', 'TB_NA_WM_EH_DC_IMG']);
   assert.match(sql, /^SELECT a FROM TB_NA_WM_DM_OUT/);
+});
+
+test('사용자 IP는 결과 어디에도 남지 않고, 같은 IP는 같은 토큰으로 사용자 수 계산이 된다', () => {
+  let seq = 0;
+  const rec = ip => ({ LOG_OCCUR_DTTM: '2026-10-01 10:00:00', TRX_CD: 'T1', SEND_USER_IP: ip, TRX_GUID: 'guid-' + (++seq) });
+  const a = C.extractRow(rec('10.1.1.1')), a2 = C.extractRow(rec('10.1.1.1')), b = C.extractRow(rec('10.1.1.2'));
+  assert.ok(!JSON.stringify(a).includes('10.1.1.1'), '원본 IP 가 남아 있음');
+  assert.ok(!('ip' in a.row));
+  assert.equal(a.row.u, a2.row.u);
+  assert.notEqual(a.row.u, b.row.u);
+  assert.equal(C.extractRow({ LOG_OCCUR_DTTM: '2026-10-01 10:00:00', TRX_CD: 'T1' }).row.u, '');
+  const A = C.analyze(C.buildDataset([rec('10.1.1.1'), rec('10.1.1.1'), rec('10.1.1.2')].map((r, i) => Object.assign(r, { TRX_GUID: 'x' + i }))).rows);
+  assert.equal(A.groups[0].users, 2);
 });
 
 test('extractRow: defaultParameterMap 이면 프록시 매퍼 메서드·Biz 로 대체', () => {

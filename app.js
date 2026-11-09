@@ -102,7 +102,7 @@
     const qs = g.queries.slice(0, 6).map(q => '<li><code>' + esc(q.label) + '</code> · <b>' + q.n + '건</b></li>').join('');
     const tbs = g.tables.length ? g.tables.map(t => '<code>' + esc(t.name) + '</code>').join(' ') : '<small>스택트레이스에 SQL이 없어 확인되지 않음</small>';
     const ev = g.events.map(e =>
-      '<tr><td>' + esc(e.d + ' ' + e.t) + '</td><td>' + esc(e.n) + '</td><td>' + esc(e.c) + '</td><td>' + esc(e.ip) + '</td><td>' +
+      '<tr><td>' + esc(e.d + ' ' + e.t) + '</td><td>' + esc(e.n) + '</td><td>' + esc(e.c) + '</td><td>' +
       (e.to ? e.to / 1000 + '초' : '') + '</td><td class="w"><code>' + esc(e.ql) + '</code></td></tr>').join('');
     return '<div class="detail">' +
       '<div><h3>점수 구성 (' + g.score + '점)</h3>최근 30일 ' + Math.round(p.recent) + '/' + W.recent + ' · 발생 일수 ' + Math.round(p.days) + '/' + W.days +
@@ -111,7 +111,7 @@
       '<div><h3>대상 테이블</h3>' + tbs + '</div>' +
       '<div><h3>서버·제한시간</h3>' + g.nodes.map(n => esc(n.name) + ' ' + n.n + '건').join(' · ') +
       ' &nbsp;|&nbsp; 제한시간 ' + g.timeouts.map(t => t.ms / 1000 + '초 ' + t.n + '건').join(' · ') + '</div>' +
-      '<div><h3>최근 발생 이력 (최대 10건)</h3><div class="scroll"><table class="mini"><thead><tr><th>일시</th><th>서버</th><th>컨테이너</th><th>사용자 IP</th><th>제한시간</th><th>쿼리</th></tr></thead><tbody>' + ev + '</tbody></table></div></div>' +
+      '<div><h3>최근 발생 이력 (최대 10건)</h3><div class="scroll"><table class="mini"><thead><tr><th>일시</th><th>서버</th><th>컨테이너</th><th>제한시간</th><th>쿼리</th></tr></thead><tbody>' + ev + '</tbody></table></div></div>' +
       (g.sql ? '<details><summary>SQL 샘플 (가장 많이 발생한 쿼리)</summary><pre>' + esc(g.sql) + '</pre></details>' : '') +
       '</div>';
   }
@@ -279,7 +279,7 @@
       '<tr><td>최근 30일 발생 건수</td><td class="num">' + W.recent + '</td><td>' + c.recentFull + '건 이상</td></tr>' +
       '<tr><td>발생 일수 (꾸준히 반복되는가)</td><td class="num">' + W.days + '</td><td>' + c.dayCap + '일 이상 (기간이 짧으면 자동 축소)</td></tr>' +
       '<tr><td>월 지속 (여러 달에 걸쳐 나오는가)</td><td class="num">' + W.months + '</td><td>데이터 기간의 모든 달에 발생</td></tr>' +
-      '<tr><td>영향 사용자 (서로 다른 IP 수)</td><td class="num">' + W.users + '</td><td>' + c.usersFull + '명 이상</td></tr>' +
+      '<tr><td>영향 사용자 (서로 다른 사용자 수 · IP는 저장·표시하지 않음)</td><td class="num">' + W.users + '</td><td>' + c.usersFull + '명 이상</td></tr>' +
       '<tr><td>최근 14일 급증</td><td class="num">' + W.trend + '</td><td>직전 14일 대비 3배 이상 (최근 14일 3건 이상일 때만)</td></tr>' +
       '</tbody></table>' +
       '<p><b>등급</b> · ' + c.critical + '점 이상 <b>즉시 조치</b> · ' + c.warn + '점 이상 <b>조치 검토</b> · 그 밖은 <b>관찰</b></p>' +
@@ -305,7 +305,7 @@
   function csvCell(v) { const s = String(v == null ? '' : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   function exportCsv() {
     if (!state.A) return;
-    const head = ['순위', '등급', '점수', '화면ID', '거래코드', '전체', '최근14일', '직전14일', '최근30일', '발생일수', '발생월수', '영향사용자(IP)', '의심쿼리', '대상테이블', '근거', '권장조치'];
+    const head = ['순위', '등급', '점수', '화면ID', '거래코드', '전체', '최근14일', '직전14일', '최근30일', '발생일수', '발생월수', '영향사용자(명)', '의심쿼리', '대상테이블', '근거', '권장조치'];
     const lines = [head.join(',')].concat(state.A.groups.map(g => [
       g.rank, TIER[g.tier].label, g.score, g.scr, g.trx, g.n, g.r14, g.p14, g.r30, g.days, g.months, g.users,
       g.queries[0] ? g.queries[0].label : '', g.tables.map(t => t.name).join(' '),

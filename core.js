@@ -21,7 +21,7 @@
     warn: 40,     // 이 점수 이상 → 조치 검토
     weights: { recent: 35, days: 25, months: 15, users: 10, trend: 15 },
     recentFull: 20,  // 최근 30일 이 건수면 '최근' 항목 만점
-    usersFull: 10,   // 영향 IP 수가 이 값이면 '사용자' 항목 만점
+    usersFull: 10,   // 영향 사용자 수가 이 값이면 '사용자' 항목 만점
     daysFullMax: 15  // 발생 일수 만점 상한(기간이 짧으면 자동 축소)
   };
 
@@ -39,6 +39,25 @@
 
   const GENERIC_PROXY = new Set(['selectList', 'selectOne', 'selectMap', 'select', 'insert', 'update', 'delete',
     'commit', 'rollback', 'flushStatements', 'selectCursor', 'getConnection', 'close', 'clearCache']);
+
+  /* 사용자 IP 는 저장·표시하지 않는다. "서로 다른 사용자 수" 계산용으로만, 읽을 때마다 새로 만드는
+   * 임의 값(salt)을 섞은 해시 토큰으로 바꾼다. salt 는 어디에도 저장되지 않으므로 IP 로 되돌릴 수 없다. */
+  const SALT = (typeof crypto !== 'undefined' && crypto.getRandomValues)
+    ? crypto.getRandomValues(new Uint32Array(1))[0]
+    : Math.floor(Math.random() * 4294967296);
+  function anon(v) {
+    const s = str(v).trim();
+    if (!s) return '';
+    let h1 = 0xdeadbeef ^ SALT, h2 = 0x41c6ce57 ^ SALT;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
 
   function normDttm(v) {
     if (v instanceof Date) {
@@ -101,7 +120,7 @@
         n: str(rec.NODE_NM).trim(),
         c: str(rec.CONTAINER_NM).trim(),
         scr: str(rec.SCREEN_ID).trim(),
-        ip: str(rec.SEND_USER_IP).trim(),
+        u: anon(rec.SEND_USER_IP), // 익명 사용자 토큰 (원본 IP 는 버림)
         err: str(rec.ERR_CD).trim(),
         to, q, ql, tb, ora,
         lk: Number(rec.LINK_SEQ) || 0,
@@ -243,7 +262,7 @@
       let g = byTrx.get(r.trx);
       if (!g) {
         g = {
-          trx: r.trx, scr: r.scr, n: 0, daySet: new Set(), monthSet: new Set(), ipSet: new Set(),
+          trx: r.trx, scr: r.scr, n: 0, daySet: new Set(), monthSet: new Set(), userSet: new Set(),
           r14: 0, p14: 0, r30: 0, nodes: {}, to: {}, errs: {}, q: {}, tb: {}, ora: {},
           series: new Array(span).fill(0), rows: [], first: r.d, last: r.d
         };
@@ -254,7 +273,7 @@
       g.series[di]++;
       g.daySet.add(r.d);
       g.monthSet.add(mk);
-      if (r.ip) g.ipSet.add(r.ip);
+      if (r.u) g.userSet.add(r.u);
       if (ago < 14) g.r14++; else if (ago < 28) g.p14++;
       if (ago < 30) g.r30++;
       if (r.d < g.first) g.first = r.d;
@@ -272,7 +291,7 @@
 
     const groups = [];
     for (const g of byTrx.values()) {
-      const days = g.daySet.size, months_ = g.monthSet.size, users = g.ipSet.size;
+      const days = g.daySet.size, months_ = g.monthSet.size, users = g.userSet.size;
       const parts = {
         recent: W.recent * Math.min(g.r30 / cfg.recentFull, 1),
         days: W.days * Math.min(days / dayCap, 1),
@@ -312,7 +331,7 @@
       if (spike) add('danger', '최근 14일 급증 (' + g.p14 + '→' + g.r14 + '건)');
       if (M >= 2 && months_ === M) add('warn', M + '개월 연속 발생');
       if (days >= 10) add('warn', days + '일 발생');
-      if (users >= 5) add('warn', '영향 사용자(IP) ' + users + '명');
+      if (users >= 5) add('warn', '영향 사용자 ' + users + '명');
       if (skewNode) add('info', skewNode + ' 서버 편중 ' + Math.round(topNode.n / nodeTotal * 100) + '%');
       else if (g.n >= 8 && nodes.length >= 3) add('info', '전 서버 공통 발생 (쿼리·데이터 원인 가능성)');
       const maxDayN = Math.max.apply(null, g.series);
