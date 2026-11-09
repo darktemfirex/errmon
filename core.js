@@ -357,6 +357,7 @@
       groups.push(grp);
     }
     groups.sort((a, b) => b.score - a.score || b.r30 - a.r30 || b.n - a.n);
+    groups.forEach((g, i) => { g.rank = i + 1; });
 
     // 급증일: 평균 + 2표준편차 이상 (최소 5건)
     const mean = total.reduce((a, b) => a + b, 0) / span;
@@ -398,8 +399,197 @@
     };
   }
 
+  /* ---------- TXT 보고서 ---------- */
+  // 한글 등 전각 문자는 폭 2로 계산해서 표 줄을 맞춘다
+  const dw = s => {
+    let w = 0;
+    for (const ch of String(s)) {
+      const c = ch.codePointAt(0);
+      w += (c >= 0x1100 && c <= 0x115f) || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) ||
+        (c >= 0xf900 && c <= 0xfaff) || (c >= 0xff00 && c <= 0xff60) ? 2 : 1;
+    }
+    return w;
+  };
+  const padR = (s, n) => { s = String(s); return s + ' '.repeat(Math.max(0, n - dw(s))); };
+  const padL = (s, n) => { s = String(s); return ' '.repeat(Math.max(0, n - dw(s))) + s; };
+  function cut(s, n) {
+    s = String(s);
+    if (dw(s) <= n) return s;
+    let out = '';
+    for (const ch of s) { if (dw(out) + dw(ch) > n - 1) break; out += ch; }
+    return out + '…';
+  }
+  function wrapText(s, width, indent) {
+    const lines = [];
+    let cur = '';
+    for (const ch of String(s)) {
+      if (dw(cur) + dw(ch) > width) { lines.push(cur); cur = ''; }
+      cur += ch;
+    }
+    if (cur) lines.push(cur);
+    return lines.map(l => indent + l);
+  }
+
+  // 단어 단위 줄바꿈(SQL 처럼 공백으로 구분된 긴 문장용). 한 단어가 폭보다 길면 글자 단위로 자른다.
+  function wrapWords(s, width, indent) {
+    const lines = [];
+    let cur = '';
+    String(s).split(' ').forEach(w => {
+      while (dw(w) > width) {
+        if (cur) { lines.push(cur); cur = ''; }
+        let head = '';
+        for (const ch of w) { if (dw(head) + dw(ch) > width) break; head += ch; }
+        lines.push(head);
+        w = w.slice(head.length);
+      }
+      if (!cur) cur = w;
+      else if (dw(cur) + 1 + dw(w) <= width) cur += ' ' + w;
+      else { lines.push(cur); cur = w; }
+    });
+    if (cur) lines.push(cur);
+    return lines.map(l => indent + l);
+  }
+
+  /** 분석 결과(A)를 사람이 읽는 TXT 보고서로 만든다. 사용자 IP 는 포함하지 않는다. */
+  function generateReport(A, meta) {
+    meta = meta || {};
+    const now = meta.now instanceof Date ? meta.now : new Date();
+    const nowText = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    const K = A.kpi, cfg = A.cfg, W = cfg.weights;
+    const TL = { critical: '즉시 조치', warn: '조치 검토', watch: '관찰' };
+    const WD = ['일', '월', '화', '수', '목', '금', '토'];
+    const L = [];
+    const add = s => { L.push(s === undefined ? '' : s); };
+    const H1 = '='.repeat(74), H2 = '-'.repeat(74);
+    const sec = t => { add(); add(H1); add(' ' + t); add(H1); };
+    const pct = (a, b) => (b > 0 ? (a >= b ? '+' : '') + Math.round((a - b) / b * 100) + '%' : '-');
+    const barOf = (v, max, w) => '#'.repeat(max > 0 ? Math.round(v / max * w) : 0);
+    const byTier = t => A.groups.filter(g => g.tier === t);
+    const label = g => g.title + (g.scr && g.op ? ' · ' + g.op : '');
+    const tops = (arr, n) => arr.slice(0, n).map(x => x.name + ' ' + x.n + '건').join(', ');
+
+    add(H1);
+    add(' 오류 분석 보고서');
+    add(H1);
+    add('작성일시 : ' + nowText);
+    add('분석기간 : ' + K.from + ' ~ ' + K.to + ' (' + K.span + '일)');
+    add('분석파일 : ' + ((meta.files && meta.files.length) ? meta.files.join(', ') : (meta.source || '-')));
+    add('분석건수 : ' + K.total + '건 (' + K.groupCount + '개 거래, 고유 거래 ' + K.unique + '건)');
+    add('참고사항 : 사용자 IP는 저장·표시하지 않았습니다.');
+
+    // [1] 요약
+    sec('[1] 요약');
+    add('- 즉시 조치 ' + K.critical + '개 / 조치 검토 ' + K.warn + '개 / 관찰 ' + K.watch + '개');
+    add('- 최근 14일 ' + K.last14 + '건 (직전 14일 ' + K.prev14 + '건 대비 ' + pct(K.last14, K.prev14) + ')');
+    add('- 가장 많았던 날: ' + K.busiest.d + ' (' + K.busiest.n + '건)');
+    if (A.spikeDays.length) add('- 급증일(평균+2σ 이상, ' + Math.ceil(A.spikeThr) + '건 이상): ' + A.spikeDays.map(s => s.d + '(' + s.n + '건)').join(', '));
+    const hourTop = A.hourly.map((n, h) => ({ name: String(h).padStart(2, '0') + '시', n })).sort((a, b) => b.n - a.n).slice(0, 3);
+    add('- 집중 시간대: ' + tops(hourTop, 3));
+    add('- 서버(NODE)별: ' + tops(A.nodes, 6));
+    add('- 컨테이너별: ' + tops(A.containers, 6));
+    const crit = byTier('critical');
+    if (crit.length) {
+      add();
+      add('▶ 우선 조치 대상');
+      crit.forEach(g => add('   ' + g.rank + '. ' + label(g) + ' (' + g.trx + ') ' + g.score + '점 - ' + (g.queries[0] ? g.queries[0].label : '쿼리 미확인')));
+    } else {
+      add('▶ 즉시 조치 대상 없음');
+    }
+
+    // [2] 즉시 조치
+    sec('[2] 즉시 조치 대상 (' + crit.length + '개) - 점수 ' + cfg.critical + '점 이상 또는 심각한 오라클 오류');
+    if (!crit.length) add('해당 없음');
+    crit.forEach(g => {
+      add();
+      add(g.rank + ') ' + label(g) + '  [' + g.trx + ' / ' + g.kind + ']   ' + g.score + '점');
+      add(H2);
+      add('  근거      : ' + (g.badges.length ? g.badges.map(b => b.text).join(' / ') : '-'));
+      add('  발생      : 전체 ' + g.n + '건 / 최근 14일 ' + g.r14 + '건(직전 ' + g.p14 + '건) / 최근 30일 ' + g.r30 + '건');
+      add('              발생 ' + g.days + '일, ' + g.months + '개월, 영향 사용자 ' + g.users + '명, 기간 ' + g.first + ' ~ ' + g.last);
+      add('  제한시간  : ' + (g.timeouts.length ? g.timeouts.map(t => t.ms / 1000 + '초 ' + t.n + '건').join(', ') : '-'));
+      add('  서버 분포 : ' + (g.nodes.length ? g.nodes.map(n => n.name + ' ' + n.n + '건').join(', ') : '-'));
+      add('  의심 쿼리 : ' + (g.queries.length ? g.queries.slice(0, 5).map(q => q.label + ' (' + q.n + '건)').join(', ') : '-'));
+      add('  대상 테이블: ' + (g.tables.length ? g.tables.map(t => t.name).join(', ') : '(스택트레이스에 SQL 없음)'));
+      add('  권장 조치 :');
+      g.actions.forEach(a => add('    - ' + a));
+      add('  최근 발생 이력(최대 5건):');
+      g.events.slice(0, 5).forEach(e => add('    ' + e.d + ' ' + e.t + '  ' + padR(e.n, 11) + padR(e.c, 10) + (e.to ? e.to / 1000 + '초' : '') + '  ' + e.ql));
+      if (g.sql) {
+        add('  SQL 샘플(가장 많이 발생한 쿼리, 최대 600자):');
+        wrapWords(g.sql.slice(0, 600) + (g.sql.length > 600 ? ' ...' : ''), 68, '    ').forEach(add);
+      }
+    });
+
+    // [3] 조치 검토
+    const warn = byTier('warn');
+    sec('[3] 조치 검토 대상 (' + warn.length + '개) - 점수 ' + cfg.warn + '점 이상');
+    if (!warn.length) add('해당 없음');
+    warn.forEach(g => {
+      add();
+      add(g.rank + ') ' + label(g) + '  [' + g.trx + ']   ' + g.score + '점');
+      add('   근거: ' + (g.badges.length ? g.badges.slice(0, 4).map(b => b.text).join(' / ') : '-'));
+      add('   발생: 전체 ' + g.n + '건 / 최근 14일 ' + g.r14 + '건(직전 ' + g.p14 + '건) / ' + g.days + '일 / 사용자 ' + g.users + '명');
+      add('   의심 쿼리: ' + (g.queries[0] ? g.queries[0].label + ' (' + g.queries[0].n + '건)' : '-') +
+        (g.tables.length ? ' / 테이블: ' + g.tables.slice(0, 3).map(t => t.name).join(', ') : ''));
+    });
+
+    // [4] 관찰
+    const watch = byTier('watch');
+    sec('[4] 관찰 대상 (' + watch.length + '개)');
+    if (!watch.length) add('해당 없음');
+    else {
+      add(padL('순위', 4) + '  ' + padL('점수', 4) + '  ' + padR('화면·오퍼레이션', 18) + padL('전체', 5) + padL('최근14일', 9) + '  의심 쿼리');
+      watch.forEach(g => add(padL(g.rank, 4) + '  ' + padL(g.score, 4) + '  ' + padR(cut(g.short, 18), 18) + padL(g.n, 5) + padL(g.r14, 9) + '  ' + cut(g.queries[0] ? g.queries[0].label : '-', 40)));
+    }
+
+    // [5] 일자별 추이
+    sec('[5] 일자별 오류 발생 추이');
+    add();
+    add('5-1. 월별 요약');
+    add(padR('월', 9) + padL('건수', 6) + padL('발생일수', 10) + padL('일평균', 8) + padL('전월대비', 10) + '  상위 3개 거래');
+    A.monthly.forEach((m, i) => {
+      const prev = A.monthly[i - 1];
+      const avg = m.n / m.calDays;
+      const prevAvg = prev ? prev.n / prev.calDays : 0;
+      add(padR(m.month, 9) + padL(m.n, 6) + padL(m.days + '/' + m.calDays, 10) + padL(avg.toFixed(1), 8) + padL(prev && prevAvg ? pct(avg, prevAvg) : '-', 10) +
+        '  ' + m.top.map(t => t.label + ' ' + t.n + '건').join(', '));
+    });
+    add();
+    add('5-2. 주별 (월요일 시작)');
+    const wk = aggregate(A.dayKeys, A.total, 'week');
+    const wmax = Math.max.apply(null, wk.values.concat([1]));
+    wk.values.forEach((v, i) => add('  ' + wk.keys[i] + '~  ' + padL(v, 4) + '  ' + barOf(v, wmax, 40)));
+    add();
+    add('5-3. 일별 (<급증> = 급증일)');
+    const dmax = Math.max.apply(null, A.total.concat([1]));
+    const spikeSet = new Set(A.spikeDays.map(s => s.d));
+    A.dayKeys.forEach((d, i) => add('  ' + d + '(' + WD[new Date(toUTC(d)).getUTCDay()] + ')  ' + padL(A.total[i], 3) + '  ' + padR(barOf(A.total[i], dmax, 32), 32) + (spikeSet.has(d) ? ' <급증>' : '')));
+    add();
+    add('5-4. 시간대별');
+    const hmax = Math.max.apply(null, A.hourly.concat([1]));
+    A.hourly.forEach((v, h) => add('  ' + String(h).padStart(2, '0') + '시  ' + padL(v, 4) + '  ' + barOf(v, hmax, 40)));
+    add();
+    add('5-5. 요일별');
+    const wmaxd = Math.max.apply(null, A.weekday.concat([1]));
+    A.weekday.forEach((v, d) => add('  ' + WD[d] + '요일  ' + padL(v, 4) + '  ' + barOf(v, wmaxd, 40)));
+
+    // [6] 기준
+    sec('[6] 점수 계산 방식 (거래 단위, 100점 만점)');
+    add('- 최근 30일 발생 건수 ' + W.recent + '점 (' + cfg.recentFull + '건 이상이면 만점)');
+    add('- 발생 일수 ' + W.days + '점 (' + cfg.dayCap + '일 이상이면 만점, 기간이 짧으면 자동 축소)');
+    add('- 월 지속 ' + W.months + '점 (데이터 기간의 모든 달에 발생하면 만점)');
+    add('- 영향 사용자 수 ' + W.users + '점 (' + cfg.usersFull + '명 이상이면 만점)');
+    add('- 최근 14일 급증 ' + W.trend + '점 (직전 14일 대비 3배 이상, 최근 14일 3건 이상일 때)');
+    add('- 등급: ' + cfg.critical + '점 이상 즉시 조치, ' + cfg.warn + '점 이상 조치 검토, 그 밖은 관찰');
+    add('- 보정: 최근 30일 발생이 없으면 관찰로 내림 / 최근 14일 5건 이상이면서 직전의 3배 이상이면 최소 조치 검토 /');
+    add('        심각한 오라클 오류(ORA-00600, 07445, 04031, 01555, 01652~01654, 03113)는 즉시 조치');
+    add();
+    add('※ 이 보고서는 오류 모니터링 시스템에서 자동 생성되었습니다.');
+    return L.join('\r\n') + '\r\n';
+  }
+
   return {
     DEFAULTS, CRITICAL_ORA, extractRow, recordsFromAoa, buildDataset, analyze,
-    aggregate, movingAvg, fmtDate, toUTC
+    aggregate, movingAvg, fmtDate, toUTC, generateReport
   };
 });

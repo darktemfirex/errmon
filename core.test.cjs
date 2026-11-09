@@ -119,4 +119,33 @@ test('일별 추이: 빈 날짜는 0으로 채우고 합계가 일치한다', ()
   assert.deepEqual(m.values, [3]);
 });
 
+test('보고서: 핵심 섹션·순위·일별 추이가 들어가고 IP/원본 이메일 같은 값은 없다', () => {
+  const days = span('2026-08-01', 92);
+  const steady = rowsFor('STEADY', days.filter((_, i) => i % 3 === 0).concat(days.slice(-20)), { scr: '710001' });
+  const other = rowsFor('OTHER', days.slice(0, 5));
+  const A = C.analyze([].concat(steady, other));
+  const txt = C.generateReport(A, { files: ['a.xlsx', 'b.xlsx'], now: new Date(2026, 10, 9, 14, 5) });
+  assert.ok(txt.includes('오류 분석 보고서'));
+  assert.ok(txt.includes('작성일시 : 2026-11-09 14:05'));
+  assert.ok(txt.includes('분석파일 : a.xlsx, b.xlsx'));
+  for (const s of ['[1] 요약', '[2] 즉시 조치 대상', '[3] 조치 검토 대상', '[4] 관찰 대상', '[5] 일자별 오류 발생 추이', '[6] 점수 계산 방식']) assert.ok(txt.includes(s), s);
+  assert.ok(txt.includes('화면 710001'));
+  // 일별 추이: 기간의 모든 날짜가 한 줄씩
+  assert.equal(A.dayKeys.every(d => txt.includes('  ' + d + '(')), true);
+  assert.ok(!/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(txt), 'IP 형태 문자열이 있음');
+  assert.ok(txt.endsWith('\r\n'));
+  assert.ok(!/undefined|NaN|\[object/.test(txt), '값이 비어 있는 곳이 있음: ' + (txt.match(/.*(undefined|NaN|\[object).*/) || [''])[0]);
+  assert.ok(txt.includes('1) 화면 710001'), '순위 번호');
+  assert.equal(A.groups[0].rank, 1);
+});
+
+test('보고서: 한글 폭을 반영해 관찰 표 컬럼이 맞는다', () => {
+  const days = span('2026-08-01', 40);
+  const A = C.analyze(rowsFor('W1', days.slice(0, 3)).concat(rowsFor('W2', days.slice(0, 2), { scr: '' })));
+  const lines = C.generateReport(A, {}).split('\r\n');
+  const hi = lines.findIndex(l => l.includes('화면·오퍼레이션'));
+  assert.ok(hi > 0);
+  assert.ok(lines[hi + 1].includes('XDao.sel'));
+});
+
 test('analyze: 빈 입력은 null', () => { assert.equal(C.analyze([]), null); });

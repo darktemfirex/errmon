@@ -295,6 +295,7 @@
     $('#period').textContent = '엑셀을 불러오면 분석이 시작됩니다.';
     $('#reset').hidden = true;
     $('#csv').hidden = true;
+    $('#txt').hidden = true;
     msg('');
     $('#sec-kpi').className = '';
     $('#sec-kpi').innerHTML =
@@ -313,6 +314,7 @@
   /* ---------- 전체 렌더 ---------- */
   function setData(data, source) {
     $('#csv').hidden = false;
+    $('#txt').hidden = false;
     $('#reset').hidden = !state.builtin;
     $('#sec-kpi').className = 'kpis';
     state.data = data;
@@ -340,6 +342,25 @@
     a.download = '오류_조치우선순위_' + state.A.kpi.to.replace(/-/g, '') + '.csv';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function downloadBlob(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  function exportReport() {
+    if (!state.A) return;
+    const now = new Date();
+    const p = n => String(n).padStart(2, '0');
+    const text = C.generateReport(state.A, { files: state.data && state.data.files, source: state.source, now });
+    const name = '오류분석보고서_' + state.A.kpi.from.replace(/-/g, '') + '-' + state.A.kpi.to.replace(/-/g, '') +
+      '_작성' + now.getFullYear() + p(now.getMonth() + 1) + p(now.getDate()) + '-' + p(now.getHours()) + p(now.getMinutes()) + '.txt';
+    // UTF-8 BOM 을 붙여서 윈도우 메모장에서도 한글이 깨지지 않게 한다
+    downloadBlob(new Blob(['﻿' + text], { type: 'text/plain;charset=utf-8' }), name);
+    msg('보고서를 저장했습니다: ' + name + ' (브라우저 다운로드 폴더 확인)', 'info');
   }
 
   async function handleFiles(fileList) {
@@ -395,6 +416,7 @@
   });
   $('#file').addEventListener('change', ev => { handleFiles(ev.target.files).then(() => { ev.target.value = ''; }); });
   $('#csv').addEventListener('click', exportCsv);
+  $('#txt').addEventListener('click', exportReport);
 
   // 엑셀 끌어다 놓기 (화면 어디에 놓아도 됨)
   let dragDepth = 0;
