@@ -1,0 +1,5 @@
+version: axhub/v1
+name: errmon
+build:
+  deploy_method: static
+  static_output_dir: .
