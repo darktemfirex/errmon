@@ -1,6 +1,6 @@
 // 앱 셸만 캐시해서 오프라인에서도 화면이 열리게 한다.
 // data.json(사내 오류 로그에서 만든 데이터)과 업로드한 엑셀은 캐시하지 않는다.
-const CACHE = "errmon-v1";
+const CACHE = "errmon-v2";
 const SHELL = [
   "./", "./index.html", "./style.css", "./core.js", "./app.js",
   "./vendor/xlsx.full.min.js", "./manifest.webmanifest",
