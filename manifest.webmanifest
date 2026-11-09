@@ -1,0 +1,17 @@
+{
+  "name": "오류 모니터링 · 조치 우선순위",
+  "short_name": "오류모니터링",
+  "description": "오류 로그 엑셀을 읽어 꼭 조치해야 할 거래를 추리고 일자별 추이를 보여 줍니다",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#2459d6",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ]
+}
