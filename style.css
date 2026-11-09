@@ -46,6 +46,7 @@ small { color: var(--muted); }
 .btn:focus-visible, .link:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .msg { max-width: 1240px; margin: 12px auto 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; background: var(--info-bg); color: var(--info); }
+.msg.info { background: var(--info-bg); color: var(--info); }
 .msg.err { background: var(--danger-bg); color: var(--danger); }
 .msg.hide { display: none; }
 

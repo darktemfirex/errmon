@@ -378,8 +378,8 @@
     fetch('data.json', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(d => { state.builtin = d; setData(d, '내장 데이터'); msg(''); })
       .catch(e => {
-        $('#period').textContent = '내장 데이터를 불러오지 못했습니다.';
-        msg('내장 데이터(data.json)를 읽지 못했습니다 (' + e.message + '). 파일을 직접 여는 대신 웹 서버로 열거나, 위의 “엑셀 불러오기”로 엑셀을 선택해 주세요.', 'err');
+        $('#period').textContent = '분석할 데이터가 없습니다. 오른쪽 위 “엑셀 불러오기”로 오류 로그 엑셀을 선택해 주세요.';
+        msg('내장 데이터가 없습니다(' + e.message + '). 엑셀은 이 브라우저 안에서만 분석되고 서버로 전송되지 않습니다.', 'info');
       });
   }
   loadBuiltin();
